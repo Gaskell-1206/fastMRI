@@ -18,7 +18,9 @@ import h5py
 import numpy as np
 import torch
 import yaml
-
+import pandas as pd
+import requests
+import csv
 
 def et_query(
     root: etree.Element,
@@ -206,6 +208,8 @@ class SliceDataset(torch.utils.data.Dataset):
         volume_sample_rate: Optional[float] = None,
         dataset_cache_file: Union[str, Path, os.PathLike] = "dataset_cache.pkl",
         num_cols: Optional[Tuple[int]] = None,
+        annotations: bool = True,
+        annotations_version: Optional[str] = None,
     ):
         """
         Args:
@@ -239,6 +243,7 @@ class SliceDataset(torch.utils.data.Dataset):
                 "either set sample_rate (sample by slices) or volume_sample_rate (sample by volumes) but not both"
             )
 
+
         self.dataset_cache_file = Path(dataset_cache_file)
 
         self.transform = transform
@@ -260,6 +265,10 @@ class SliceDataset(torch.utils.data.Dataset):
         else:
             dataset_cache = {}
 
+        # obtain annotation
+        if annotations is True:
+            annotation_fileName = self.Download_csv(annotations_version)
+
         # check if our dataset is in the cache
         # if there, use that metadata, if not, then regenerate the metadata
         if dataset_cache.get(root) is None or not use_dataset_cache:
@@ -267,9 +276,13 @@ class SliceDataset(torch.utils.data.Dataset):
             for fname in sorted(files):
                 metadata, num_slices = self._retrieve_metadata(fname)
 
-                self.examples += [
-                    (fname, slice_ind, metadata) for slice_ind in range(num_slices)
-                ]
+                csv_data = pd.read_csv(annotation_fileName)
+                annotations = csv_data[csv_data['file'] == fname.stem]
+
+                if len(annotations) > 0:
+                    self.examples += [
+                        (fname, slice_ind, metadata) for slice_ind in range(num_slices)
+                    ]
 
             if dataset_cache.get(root) is None and use_dataset_cache:
                 dataset_cache[root] = self.examples
@@ -300,6 +313,27 @@ class SliceDataset(torch.utils.data.Dataset):
                 for ex in self.examples
                 if ex[2]["encoding_size"][1] in num_cols  # type: ignore
             ]
+
+    def Download_csv(self, version):
+        url = 'https://cdn.jsdelivr.net/gh/microsoft/fastmri-plus@{0}/Annotations/knee.csv'.format(version)
+
+        if not os.path.isdir('.annotation'):
+            os.system('mkdir .annotation')
+
+        annotation_fileName = os.path.join(os.getcwd(), '.annotation', 'annotation_knee_{0}.csv'.format(version))
+        if not os.path.isfile(annotation_fileName):
+            # download csv from github and save it locally
+            try:
+                response = requests.get(url)
+            except requests.exceptions.RequestException as e:
+                raise SystemExit(e)
+
+            with open(annotation_fileName, 'w') as f:
+                writer = csv.writer(f)
+                for line in response.iter_lines():
+                    writer.writerow(line.decode('utf-8').split(','))
+            f.close()
+        return annotation_fileName
 
     def _retrieve_metadata(self, fname):
         with h5py.File(fname, "r") as hf:
@@ -358,3 +392,6 @@ class SliceDataset(torch.utils.data.Dataset):
             sample = self.transform(kspace, mask, target, attrs, fname.name, dataslice)
 
         return sample
+
+
+SliceDataset('/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_test/multicoil_train', 'multicoil', annotations_version='487d480')
