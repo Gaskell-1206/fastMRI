@@ -386,7 +386,7 @@ class AnnotatedSliceDataset(SliceDataset):
         volume_sample_rate: Optional[float] = None,
         dataset_cache_file: Union[str, Path, os.PathLike] = "dataset_cache.pkl",
         num_cols: Optional[Tuple[int]] = None,
-        annotation_version: Optional[str] = None,
+        annotation_version: Optional[str] = "main",
     ):
         """
         Args:
@@ -418,7 +418,7 @@ class AnnotatedSliceDataset(SliceDataset):
             num_cols: Optional; If provided, only slices with the desired
                 number of columns will be considered.
             annotation_version: Optional; If provided, a specific version of csv file will be downloaded based on its git hash.
-                Default value is None, then the latest version will be used.
+                Default value is main, then the latest version will be used.
         """
 
         # subclass SliceDataset
@@ -523,10 +523,10 @@ class AnnotatedSliceDataset(SliceDataset):
                 "fname": str(row.file),
                 "slice": int(row.slice),
                 "study_level": str(row.study_level),
-                "x": int(row.x),
-                "y": 320 - int(row.y) - int(row.height) - 1,
-                "width": int(row.width),
-                "height": int(row.height),
+                "x": int(row.x) if not np.isnan(row.x) else '',
+                "y": (320 - int(row.y) - int(row.height) - 1) if not np.isnan(row.y) else '',
+                "width": int(row.width) if not np.isnan(row.width) else '',
+                "height": int(row.height) if not np.isnan(row.height) else '',
                 "label": str(row.label),
             }
         return annotation
@@ -544,3 +544,26 @@ class AnnotatedSliceDataset(SliceDataset):
             for chunk in request.iter_content(1024 * 1024):
                 fh.write(chunk)
         return path
+
+    def __len__(self):
+        return len(self.annotated_examples)
+
+    def __getitem__(self, i: int):
+        fname, dataslice, metadata = self.annotated_examples[i]
+
+        with h5py.File(fname, "r") as hf:
+            kspace = hf["kspace"][dataslice]
+
+            mask = np.asarray(hf["mask"]) if "mask" in hf else None
+
+            target = hf[self.recons_key][dataslice] if self.recons_key in hf else None
+
+            attrs = dict(hf.attrs)
+            attrs.update(metadata)
+
+        if self.transform is None:
+            sample = (kspace, mask, target, attrs, fname.name, dataslice, metadata['annotation'])
+        else:
+            sample = self.transform(kspace, mask, target, attrs, fname.name, dataslice)
+
+        return sample
