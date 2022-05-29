@@ -1,21 +1,20 @@
-import argparse
-import copy
-import glob
-import os
-import random
 from operator import index
-from pathlib import Path
-
-import cv2
-import fastmri
-import h5py
-import numpy as np
+import argparse
 import pandas as pd
+import numpy as np
+import random
+import glob
+from pathlib import Path
+import os
+import fastmri
 from fastmri.data import transforms as T
-from PIL import Image, ImageDraw
-from runstats import Statistics
+import h5py
+from PIL import ImageDraw, Image
+import cv2
 from tqdm import tqdm
+import copy
 
+from runstats import Statistics
 try:
     from skimage.measure import compare_psnr
     peak_signal_noise_ratio = compare_psnr
@@ -95,7 +94,7 @@ def save_fig(img, annotations, save_path, image_type):
 
         # annotated image
         regional_image = np.array(img[y0:y1, x0:x1])
-        regional_image_list.append(copy.deepcopy(regional_image))
+        regional_image_list.append(regional_image)
         regional_image = (np.maximum(regional_image, 0) / regional_image.max()) * 255.0
         regional_image = Image.fromarray(np.uint8(regional_image))
         regional_image = np.array(regional_image)
@@ -129,12 +128,14 @@ def save_fig(img, annotations, save_path, image_type):
     return regional_image_list, zoom_in_image_list
 
 
-def compare_results(file_name, data_path, recon_path, save_path, annotation_df, acc_rate):
+def compare_results(file_name, random_fname, data_path, recon_path, save_path, annotation_df, acc_rate):
     final_results_df = pd.DataFrame(
         columns=['Sample', 'Slice', 'Annotation#', 'Annotation', 'Level', 'Acc', 'mse', 'nmse', 'psnr', 'ssim'])
 
     # read annotation
     annotations_sub = annotation_df[annotation_df['file'] == file_name]
+
+    file_name = random_fname
 
     # file_name = os.path.basename(file_path)
     file_path = data_path / f"{file_name}.h5"
@@ -156,6 +157,11 @@ def compare_results(file_name, data_path, recon_path, save_path, annotation_df, 
             hf_accX = h5py.File(img_path, 'r')
             accX_recon = hf_accX['reconstruction'][:]
 
+            try:
+                test_slice_choice = gt_recon[slice_choice, :, :]
+            except IndexError:
+                slice_choice = 5
+                
             for i in range(len(annotations)):
                 # Gloabl
                 if (gt_recon[slice_choice, :, :].shape[0] == 320) and (gt_recon[slice_choice, :, :].shape[1] == 320):
@@ -197,26 +203,36 @@ def compare_results(file_name, data_path, recon_path, save_path, annotation_df, 
 
 def main(args):
     # Ground Truth
-    data_path = Path(args.data_path)
+    data_path = args.data_path
     # Reconstruction
-    recon_path = Path(args.recon_path)
-    save_path = Path(args.save_path)
+    recon_path = args.recon_path
+    save_path = args.save_path
     accelerations = args.accelerations
     os.makedirs(save_path, exist_ok=True)
+
     annotations_csv = pd.read_csv('/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain.csv')
-    annotation_df = annotations_csv[(annotations_csv['x'] != -1)
+    annotation_df = pd.DataFrame(columns=list(annotations_csv.columns))
+    annotation_df = annotations_csv[(annotations_csv['x'] != -1) \
                                      & (annotations_csv['study_level'] == 'No')]
                                     #  & (annotations_csv['label'] != 'Nonspecific white matter lesion') \
                                     #  & (annotations_csv['label'] != 'Normal variant')]
+    
+    normal_list = list(Path(data_path).glob('**/*.h5'))
+    normal_list = [os.path.basename(filepath).split('.')[0] for filepath in normal_list]
+    normal_list = [x for x in normal_list if x not in list(annotations_csv['file'].unique())]
+    normal_list = random.Random(2022).sample(normal_list, k=len(normal_list))
 
     # Get Annotations from AnnotatedSliceDataset
+    i = 0
     for fname in tqdm(annotation_df['file'].unique()):
+        random_fname = normal_list[i]
         final_results = compare_results(
-            fname, data_path, recon_path, save_path, annotation_df, accelerations)
-        output_path=os.path.join(save_path, 'output.csv')
+            fname, random_fname, data_path, recon_path, save_path, annotation_df, accelerations)
+        output_path = os.path.join(save_path, 'output.csv')
+        i+=1
         if final_results is not None:
-            final_results.to_csv(output_path, mode = 'a',
-                                 header = not os.path.exists(output_path))
+            final_results.to_csv(output_path, mode='a',
+                                 header=not os.path.exists(output_path))
         else:
             pass
 
@@ -252,14 +268,6 @@ if __name__ == "__main__":
         default=[4],
         type=int,
         help="Acceleration rates to use for masks",
-    )
-
-    parser.add_argument(
-        "--random_file",
-        default=0,
-        choices=(0,1),
-        type=int,
-        help="Use same annotation for random select file (for comparison of patches effects)",
     )
 
     args = parser.parse_args()

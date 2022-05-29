@@ -95,13 +95,13 @@ def save_fig(img, annotations, save_path, image_type):
 
         # annotated image
         regional_image = np.array(img[y0:y1, x0:x1])
-        regional_image_list.append(copy.deepcopy(regional_image))
+        regional_image_list.append(regional_image)
         regional_image = (np.maximum(regional_image, 0) / regional_image.max()) * 255.0
         regional_image = Image.fromarray(np.uint8(regional_image))
         regional_image = np.array(regional_image)
 
         cv2.imwrite(os.path.join(
-            sub_path, f'{image_type}_{slice_choice}_{study_level}_label#{index}_regional_image.jpg'), regional_image)
+            sub_path, f'{image_type}_{slice_choice}_label#{index}_regional_image.jpg'), regional_image)
 
         # zoom in image
         region_size = 40
@@ -120,11 +120,11 @@ def save_fig(img, annotations, save_path, image_type):
         img_sub_2d_scaled = np.array(image_2d_scaled_copy_copy)
         img_sub = img_sub_2d_scaled[y0_:y1_, x0_:x1_]
         cv2.imwrite(os.path.join(
-            sub_path, f'{image_type}_{slice_choice}_{study_level}_label{index}_zoom_in_image.jpg'), img_sub)
+            sub_path, f'{image_type}_{slice_choice}_label#{index}_zoom_in_image.jpg'), img_sub)
 
     image_2d_scaled = np.array(image_2d_scaled)
     cv2.imwrite(os.path.join(
-        sub_path, f'{image_type}_{slice_choice}_{study_level}_whole_image.png'), image_2d_scaled)
+        sub_path, f'{image_type}_{slice_choice}_whole_image.png'), image_2d_scaled)
 
     return regional_image_list, zoom_in_image_list
 
@@ -203,7 +203,7 @@ def main(args):
     save_path = Path(args.save_path)
     accelerations = args.accelerations
     os.makedirs(save_path, exist_ok=True)
-    annotations_csv = pd.read_csv('/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain.csv')
+    annotations_csv = pd.read_csv('/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_random.csv')
     annotation_df = annotations_csv[(annotations_csv['x'] != -1)
                                      & (annotations_csv['study_level'] == 'No')]
                                     #  & (annotations_csv['label'] != 'Nonspecific white matter lesion') \
