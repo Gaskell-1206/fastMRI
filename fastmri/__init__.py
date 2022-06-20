@@ -19,7 +19,7 @@ from .fftc import fft2c_new as fft2c
 from .fftc import fftshift
 from .fftc import ifft2c_new as ifft2c
 from .fftc import ifftshift, roll
-from .losses import SSIMLoss
+from .losses import SSIMLoss, MS_SSIMLoss, VGGPerceptualLoss, AlexNetPerceptualLoss, NLPDLoss
 from .math import (
     complex_abs,
     complex_abs_sq,
