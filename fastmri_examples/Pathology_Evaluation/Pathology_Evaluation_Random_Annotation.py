@@ -85,6 +85,12 @@ def save_fig(img, annotations, save_path, image_type):
         sub_path = os.path.join(save_path, fname)
         if(os.path.exists(sub_path)) == False:
             os.makedirs(sub_path)
+        
+        if(os.path.exists(os.path.join(save_path, image_type))) == False:
+            os.makedirs(os.path.join(save_path, image_type))
+        
+        cv2.imwrite(os.path.join(
+            save_path, image_type, f'{fname}_{slice_choice}_{study_level}_whole_image.png'), np.array(image_2d_scaled_copy_copy))
 
         # plot bounding box
         plotted_image.rectangle(((x0, y0), (x1, y1)), outline="white")
@@ -203,11 +209,11 @@ def main(args):
     save_path = Path(args.save_path)
     accelerations = args.accelerations
     os.makedirs(save_path, exist_ok=True)
-    annotations_csv = pd.read_csv('/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain.csv')
+    annotations_csv = pd.read_csv('/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_random.csv')
     annotation_df = annotations_csv[(annotations_csv['x'] != -1)
                                      & (annotations_csv['study_level'] == 'No')]
-                                    #  & (annotations_csv['label'] != 'Nonspecific white matter lesion') \
-                                    #  & (annotations_csv['label'] != 'Normal variant')]
+
+    # annotation_df['y'] = annotation_df.apply(lambda row: 320 - int(row['y']) - int(row['height']) - 1, axis=1)
 
     # Get Annotations from AnnotatedSliceDataset
     for fname in tqdm(annotation_df['file'].unique()):
