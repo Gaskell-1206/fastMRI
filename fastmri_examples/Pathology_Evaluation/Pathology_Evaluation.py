@@ -212,15 +212,42 @@ def main(args):
     recon_path = args.recon_path / str(accelerations[0])
     save_path = args.save_path / annotation_type / str(accelerations[0])
     os.makedirs(save_path, exist_ok=True)
-    if (annotation_type == 'abnormal') | (annotation_type == 'normal'):
-        csv_path = '/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain.csv'
-    else:
-        csv_path = '/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_random.csv'
-    annotations_csv = pd.read_csv(csv_path)
-    annotation_df = annotations_csv[(annotations_csv['x'] != -1)
-                                     & (annotations_csv['study_level'] == 'No')]
+    
+    annotations_list = pd.DataFrame(fastmri.data.mri_data.AnnotatedSliceDataset(
+        data_path, "multicoil", "brain", "all", annotation_version="main").annotated_examples)[2].values.tolist()
+    annotation_df = pd.DataFrame(columns=list(annotations_list[0]['annotation'].keys()))
+    abnormal_df = pd.DataFrame(columns=list(annotations_list[0]['annotation'].keys()))
+    global_list = []
 
-    # annotation_df['y'] = annotation_df.apply(lambda row: 320 - int(row['y']) - int(row['height']) - 1, axis=1)
+    if annotation_type == 'abnormal':
+        for annotation in annotations_list:
+            if (annotation['annotation']['x'] != -1) and (annotation['annotation']['study_level'] == 'No'):
+                annotation_df = annotation_df.append(annotation['annotation'], ignore_index=True)
+
+    elif annotation_type == 'normal':
+        for annotation in annotations_list:
+            if (annotation['annotation']['x'] != -1) and (annotation['annotation']['study_level'] == 'No'):
+                abnormal_df = abnormal_df.append(annotation['annotation'], ignore_index=True)
+            elif annotation['annotation']['study_level'] == 'Yes':
+                global_list.append(annotation['annotation']['fname'])
+
+        for annotation in annotations_list: 
+            if (annotation['annotation']['x'] == -1) and (annotation['annotation']['fname'] in abnormal_df['fname'].unique()):
+                annotation_df = annotation_df.append(annotation['annotation'], ignore_index=True)
+        # abnormal_df.to_csv(f'/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_abnormal.csv',index=False)
+        annotation_df[['x','y','width','height']] = annotation_df.apply(lambda row: random_select_normal(row, abnormal_df), axis=1)
+        annotation_df[-annotation_df['fname'].isin(global_list)]
+        annotation_df.to_csv(f'/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_{annotation_type}.csv',index=False)
+
+    elif annotation_type == 'random':
+        for annotation in annotations_list:
+            if (annotation['annotation']['x'] != -1) and (annotation['annotation']['study_level'] == 'No'):
+                annotation_df = annotation_df.append(annotation['annotation'], ignore_index=True)
+        np.random.seed(2022)
+        annotation_df['x'] = annotation_df.apply(lambda row: random_select_x_axis(row, 100), axis=1)
+        annotation_df['y'] = annotation_df.apply(lambda row: random_select_y_axis(row, 80), axis=1)
+
+    annotation_df.to_csv(f'/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_{annotation_type}.csv',index=False)
 
     # Get Annotations from AnnotatedSliceDataset
     for fname in tqdm(annotation_df['file'].unique()):
@@ -274,15 +301,15 @@ if __name__ == "__main__":
         type=int,
         help="Acceleration rates to use for masks",
     )
-
-    parser.add_argument(
-        "--random_file",
-        default=0,
-        choices=(0,1),
-        type=int,
-        help="Use same annotation for random select file (for comparison of patches effects)",
-    )
-
-    args = parser.parse_args()
+    
+    class Args():
+        data_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain"
+        recon_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain/reconstruction"
+        save_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain/output"
+        annotation_type = "abnormal"
+        accelerations = 2
+        
+    args = Args()
+    # args = parser.parse_args()
 
     main(args)

@@ -443,6 +443,14 @@ class AnnotatedSliceDataset(SliceDataset):
             )
 
         # download csv file from github using git hash to find certain version
+        # annitation file_list
+        annotation_name = f"{subsplit}_file_list.csv"
+        annotation_path = Path(os.getcwd(), ".annotation_cache", annotation_name)
+        if not annotation_path.is_file():
+            annotation_path_file_list = self.download_csv(
+                annotation_version, subsplit, annotation_path
+            )
+        # annotation bounding box   
         annotation_name = f"{subsplit}{annotation_version}.csv"
         annotation_path = Path(os.getcwd(), ".annotation_cache", annotation_name)
         if not annotation_path.is_file():
@@ -463,7 +471,7 @@ class AnnotatedSliceDataset(SliceDataset):
 
             # if annotation (filename or slice) not found, fill in empty values
             if len(annotations_df) == 0:
-                annotation = self.get_annotation(True, None)
+                annotation = self.get_annotation(True, None, fname.stem, slice_ind)
                 metadata["annotation"] = annotation
                 self.annotated_examples.append(
                     list([fname, slice_ind, metadata.copy()])
@@ -506,11 +514,11 @@ class AnnotatedSliceDataset(SliceDataset):
                             list([fname, slice_ind, metadata.copy()])
                         )
 
-    def get_annotation(self, empty_value, row):
+    def get_annotation(self, empty_value, row, fname=None, slice_ind=None):
         if empty_value is True:
             annotation = {
-                "fname": "",
-                "slice": "",
+                "fname": fname,
+                "slice": slice_ind,
                 "study_level": "",
                 "x": -1,
                 "y": -1,
@@ -524,7 +532,8 @@ class AnnotatedSliceDataset(SliceDataset):
                 "slice": int(row.slice),
                 "study_level": str(row.study_level),
                 "x": int(row.x) if not np.isnan(row.x) else '',
-                "y": (320 - int(row.y) - int(row.height) - 1) if not np.isnan(row.y) else '',
+                "y": int(row.y) if not np.isnan(row.y) else '',
+                # "y": (320 - int(row.y) - int(row.height) - 1) if not np.isnan(row.y) else '',
                 "width": int(row.width) if not np.isnan(row.width) else '',
                 "height": int(row.height) if not np.isnan(row.height) else '',
                 "label": str(row.label),
@@ -543,6 +552,7 @@ class AnnotatedSliceDataset(SliceDataset):
         with open(path, "wb") as fh:
             for chunk in request.iter_content(1024 * 1024):
                 fh.write(chunk)
+                
         return path
 
     def __len__(self):
