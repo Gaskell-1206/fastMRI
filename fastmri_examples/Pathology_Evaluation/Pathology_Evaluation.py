@@ -60,6 +60,28 @@ def ssim_local(gt, pred):
         gt, pred, channel_axis=None, data_range=gt.max()
     )
 
+def checkBoundingBox(img, x0, y0, width, height):
+    threshold = 40
+    x1 = int(x0 + width)
+    y1 = int(y0 + height)
+    regional_image = np.array(img[y0:y1, x0:x1])
+    # pixel_mean = np.mean(np.mean(regional_image[y0:y1, x0:x1]))
+    zero_number = np.sum((regional_image.flatten() < 2e-05))
+    rows, cols = regional_image.shape
+    total_number = rows * cols
+    # print(zero_number / total_number)
+
+    while zero_number / total_number > 0.2:
+        # print("fraction:", zero_number / total_number)
+        x0 = random.randint(threshold,min(320-threshold,320-width)) if (320-width) > threshold else random.randint(min(320-threshold,320-width),threshold)
+        y0 = random.randint(threshold,min(320-threshold,320-height)) if (320-height) > threshold else random.randint(min(320-threshold,320-height),threshold)
+        x1 = int(x0 + width)
+        y1 = int(y0 + height)
+        # print("x0,y0,x1,y1",x0,y0,x1,y1)
+        regional_image = np.array(img[y0:y1, x0:x1])
+        # pixel_mean = np.mean(np.mean(regional_image[y0:y1, x0:x1]))
+        zero_number = np.sum((regional_image.flatten() < 2e-05))
+    return x0, y0
 
 def save_fig(img, annotations, save_path, image_type):
     # global image + bounding boxes
@@ -81,7 +103,13 @@ def save_fig(img, annotations, save_path, image_type):
         fname, slice_choice, study_level, x0, y0, w, h, label_txt = row
         w = 7 if int(w) < 7 else w
         h = 7 if int(h) < 7 else h
-        x0, y0, x1, y1 = int(x0), int(y0), int(x0+w), int(y0+h)
+        x0, y0, x1, y1, label_txt = int(x0), int(y0), int(x0+w), int(y0+h), str(label_txt)
+
+        # if (args.annotation_type == 'normal') | (args.annotation_type == 'random'):
+        #     x0, y0 = checkBoundingBox(image_2d_scaled_copy_for_save, x0, y0, w, h)
+            # print(f"checkBoundingBox for {fname}_{slice_choice}")
+        x0, y0, x1, y1 = int(x0), int(y0), int(x0+w), int(y0+h) 
+            
         sub_path = os.path.join(save_path, fname)
         if(os.path.exists(sub_path)) == False:
             os.makedirs(sub_path)
@@ -90,14 +118,16 @@ def save_fig(img, annotations, save_path, image_type):
             os.makedirs(os.path.join(save_path, image_type))
         
         cv2.imwrite(os.path.join(
-            save_path, image_type, f'{fname}_{slice_choice}_{study_level}_whole_image.png'), np.array(image_2d_scaled_copy_copy))
+            save_path, image_type, f'{fname}_{slice_choice}_{study_level}_Slice_Level_image.png'), np.array(image_2d_scaled_copy_copy))
 
         # plot bounding box
         plotted_image.rectangle(((x0, y0), (x1, y1)), outline="white")
-        plotted_image.text((x0, max(0, y0 - 10)), label_txt, fill="white")
+        if label_txt!= "-1":
+            plotted_image.text((x0, max(0, y0 - 10)), label_txt, fill="white")
 
         plotted_image_copy.rectangle(((x0, y0), (x1, y1)), outline="white")
-        plotted_image_copy.text((x0, max(0, y0 - 10)), label_txt, fill="white")
+        if label_txt!= "-1":
+            plotted_image_copy.text((x0, max(0, y0 - 10)), label_txt, fill="white")
 
         # annotated image
         regional_image = np.array(img[y0:y1, x0:x1])
@@ -107,7 +137,7 @@ def save_fig(img, annotations, save_path, image_type):
         regional_image = np.array(regional_image)
 
         cv2.imwrite(os.path.join(
-            sub_path, f'{image_type}_{slice_choice}_{study_level}_label#{index}_regional_image.jpg'), regional_image)
+            sub_path, f'{image_type}_{slice_choice}_{study_level}_label#{index}_Bounding_Box_image.jpg'), regional_image)
 
         # zoom in image
         region_size = 40
@@ -126,7 +156,7 @@ def save_fig(img, annotations, save_path, image_type):
         img_sub_2d_scaled = np.array(image_2d_scaled_copy_copy)
         img_sub = img_sub_2d_scaled[y0_:y1_, x0_:x1_]
         cv2.imwrite(os.path.join(
-            sub_path, f'{image_type}_{slice_choice}_{study_level}_label{index}_zoom_in_image.jpg'), img_sub)
+            sub_path, f'{image_type}_{slice_choice}_{study_level}_label{index}_Zoom_Out_image.jpg'), img_sub)
 
     image_2d_scaled = np.array(image_2d_scaled)
     cv2.imwrite(os.path.join(
@@ -140,16 +170,16 @@ def compare_results(file_name, data_path, recon_path, save_path, annotation_df, 
         columns=['Sample', 'Slice', 'Annotation#', 'Annotation', 'Level', 'Acc', 'mse', 'nmse', 'psnr', 'ssim'])
 
     # read annotation
-    annotations_sub = annotation_df[annotation_df['file'] == file_name]
+    annotations_sub = annotation_df[annotation_df['fname'] == file_name]
 
     # file_name = os.path.basename(file_path)
     file_path = data_path / f"{file_name}.h5"
     img_path = recon_path / 'reconstructions' / f"{file_name}.h5"
 
-    for slice_choice in annotations_sub['slice'].unique():
 
-        if os.path.exists(img_path):
-            print("exist:", img_path)
+    if os.path.exists(img_path):
+        print("exist:", img_path)
+        for slice_choice in annotations_sub['slice'].unique():
             annotations = annotations_sub[annotations_sub['slice'] == slice_choice]
 
             # read data
@@ -164,66 +194,64 @@ def compare_results(file_name, data_path, recon_path, save_path, annotation_df, 
             accX_recon = hf_accX['reconstruction'][:]
             accX_recon = accX_recon[:, ::-1, :]
 
-            for i in range(len(annotations)):
-                # Gloabl
-                if (gt_recon[slice_choice, :, :].shape[0] == 320) and (gt_recon[slice_choice, :, :].shape[1] == 320):
+            if (gt_recon[slice_choice, :, :].shape[0] == 320) and (gt_recon[slice_choice, :, :].shape[1] == 320):
+                # save figure
+                gt_region, gt_zoom_out = save_fig(
+                    gt_recon[slice_choice, :, :], annotations, save_path, image_type="gt")
+                accX_region, accX_zoom_out = save_fig(
+                    accX_recon[slice_choice, :, :], annotations, save_path, image_type="accX")
+
+                # traverse all annotations in a slice
+                for i in range(len(annotations)):
+                    # Slice_Level
+                    # calculate
                     accX_results = Evaluation_Metrics(
                         gt_recon[slice_choice, :, :], accX_recon[slice_choice, :, :], all_slice=False)
+
                     # Save Results
-                    results_list = [file_name, slice_choice, i, annotations.iloc[i,-1], 'Global', acc_rate,
+                    results_list = [file_name, slice_choice, i, annotations.iloc[i,-1], 'Slice_Level', acc_rate,
                                     accX_results[0], accX_results[1], accX_results[2], accX_results[3]]
                     final_results_df.loc[len(final_results_df)] = results_list
 
-                # Region
-                    gt_region, gt_zoom_in = save_fig(
-                        gt_recon[slice_choice, :, :], annotations, save_path, image_type="gt")
-                    accX_region, accX_zoom_in = save_fig(
-                        accX_recon[slice_choice, :, :], annotations, save_path, image_type="accX")
-
+                    # Bounding Box
+                    # calculate
                     accX_re_results = Evaluation_Metrics(
                         gt_region[i], accX_region[i], all_slice=False)
 
                     # Save Restuls
-                    results_list = [file_name, slice_choice, i, annotations.iloc[i,-1], 'Region', acc_rate,
+                    results_list = [file_name, slice_choice, i, annotations.iloc[i,-1], 'Bounding box', acc_rate,
                                     accX_re_results[0], accX_re_results[1], accX_re_results[2], accX_re_results[3]]
                     final_results_df.loc[len(final_results_df)] = results_list
 
-                    # Zoom-in
+                    # Zoom-out from Bouding Boxes
                     accX_re_zoom_results = Evaluation_Metrics(
-                        gt_zoom_in[i], accX_zoom_in[i], all_slice=False)
+                        gt_zoom_out[i], accX_zoom_out[i], all_slice=False)
                     results_list = [file_name, slice_choice, i, annotations.iloc[i,-1], 'Zoom_in', acc_rate,
                                     accX_re_zoom_results[0], accX_re_zoom_results[1], accX_re_zoom_results[2], accX_re_zoom_results[3]]
                     final_results_df.loc[len(final_results_df)] = results_list
-                else:
-                    print(
-                        f"file_name:{file_name}, slice:{slice_choice}, img_size is not standard")
-        else:
-            print(f"{file_name} no reconstruction files found")
+
+            else:
+                print(
+                    f"file_name:{file_name}, slice:{slice_choice}, img_size is not standard")
+    else:
+        print(f"{file_name} no reconstruction files found")
 
     return final_results_df
-
 
 def main(args):
     # Ground Truth
     data_path = args.data_path
     # Reconstruction
-    accelerations = args.accelerations
+    accelerations = args.accelerations[0]
     annotation_type = args.annotation_type
-    recon_path = args.recon_path / str(accelerations[0])
-    save_path = args.save_path / annotation_type / str(accelerations[0])
+    recon_path = args.recon_path / str(accelerations)
+    print("recon_path",recon_path)
+    save_path = args.save_path / annotation_type / str(accelerations)
     os.makedirs(save_path, exist_ok=True)
-    if (annotation_type == 'abnormal') | (annotation_type == 'normal'):
-        csv_path = '/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain.csv'
-    else:
-        csv_path = '/gpfs/home/sc9295/Projects/fastMRI/fastMRI/.annotation_cache/brainmain_random.csv'
-    annotations_csv = pd.read_csv(csv_path)
-    annotation_df = annotations_csv[(annotations_csv['x'] != -1)
-                                     & (annotations_csv['study_level'] == 'No')]
-
-    # annotation_df['y'] = annotation_df.apply(lambda row: 320 - int(row['y']) - int(row['height']) - 1, axis=1)
+    annotation_df = pd.read_csv(Path(os.getcwd(), '.annotation_cache', f'brainmain_{annotation_type}.csv'))
 
     # Get Annotations from AnnotatedSliceDataset
-    for fname in tqdm(annotation_df['file'].unique()):
+    for fname in tqdm(annotation_df['fname'].unique()):
         final_results = compare_results(
             fname, data_path, recon_path, save_path, annotation_df, accelerations)
         output_path=os.path.join(save_path, 'output.csv')
@@ -270,7 +298,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--accelerations",
         nargs="+",
-        default=[4],
+        default=4,
         type=int,
         help="Acceleration rates to use for masks",
     )
