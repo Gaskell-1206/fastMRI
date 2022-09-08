@@ -302,15 +302,15 @@ if __name__ == "__main__":
         type=int,
         help="Acceleration rates to use for masks",
     )
-
-    parser.add_argument(
-        "--random_file",
-        default=0,
-        choices=(0,1),
-        type=int,
-        help="Use same annotation for random select file (for comparison of patches effects)",
-    )
-
-    args = parser.parse_args()
+    
+    class Args():
+        data_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain"
+        recon_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain/reconstruction"
+        save_path = "/Users/gaskell/Dropbox/Mac/Desktop/fastMRI/fastmriplus_brain/output"
+        annotation_type = "abnormal"
+        accelerations = 2
+        
+    args = Args()
+    # args = parser.parse_args()
 
     main(args)

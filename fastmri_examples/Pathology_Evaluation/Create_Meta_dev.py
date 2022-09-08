@@ -69,7 +69,10 @@ def fix_bounding_box(file_name, data_path, recon_path, mode, annotation_abnormal
             for index_id, random_row in annotations_df.iterrows():
                 print(index_id)
                 index_df = annotation_final.loc[(annotation_df['fname'] == file_name) & (annotation_df['slice'] == slice_choice)].index[index_id]
+<<<<<<< HEAD
                 
+=======
+>>>>>>> b53d66745ecbd68d66e7ae0f106a006e0365aff1
                 if mode == "random":
                     abnormal_row = annotations_abnormal.iloc[index_id,:]
                     change_bounding_box, large_bounding_box, x0, y0 = checkBoundingBox_random(img, abnormal_row, random_row, iou_threshold=0, frac_threshold = 0.20, attempts=50)
