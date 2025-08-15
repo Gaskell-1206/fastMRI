@@ -5,10 +5,11 @@ import os
 import pathlib
 from argparse import ArgumentParser
 import pytorch_lightning as pl
+import torch
 from fastmri.data.subsample import create_mask_for_mask_type
 from fastmri.data.transforms import VarNetDataTransform
 from fastmri.pl_modules import FastMriDataModule
-from modl_module import MoDLModule
+from fastmri.pl_modules.modl_module import MoDLModule
 
 def cli_main(args):
     pl.seed_everything(args.seed)
@@ -32,7 +33,7 @@ def cli_main(args):
         sample_rate=args.sample_rate,
         batch_size=args.batch_size,
         num_workers=args.num_workers,
-        distributed_sampler=(args.accelerator in ("ddp", "ddp_cpu")),
+        distributed_sampler="ddp",
     )
 
     # Model
@@ -44,7 +45,14 @@ def cli_main(args):
     )
 
     # Trainer
-    trainer = pl.Trainer.from_argparse_args(args)
+    trainer = pl.Trainer(
+        max_epochs=args.max_epochs,
+        default_root_dir=args.default_root_dir,
+        deterministic=args.deterministic,
+        devices=1,
+        accelerator="gpu" if torch.cuda.is_available() else "cpu",
+        callbacks=args.callbacks if hasattr(args, 'callbacks') else None,
+    )
 
     # Run
     if args.mode == "train":
@@ -62,7 +70,12 @@ def build_args():
     batch_size = 1
     from fastmri.data.mri_data import fetch_dir
     data_path = fetch_dir("knee_path", path_config)
-    default_root_dir = fetch_dir("log_path", path_config) / "modl" / "modl_demo"
+    default_root_dir = pathlib.Path(fetch_dir("log_path", path_config)) / "modl" / "modl_demo"
+    
+    parser.add_argument('--max_epochs', type=int, default=50, help='Number of epochs to train')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed')
+    parser.add_argument('--deterministic', action='store_true', help='Set deterministic training')
+    parser.add_argument('--default_root_dir', type=str, default=str(default_root_dir), help='Path to default root directory')
 
     parser.add_argument(
         "--mode",
@@ -110,26 +123,15 @@ def build_args():
         weight_decay=0.0,
     )
 
-    parser = pl.Trainer.add_argparse_args(parser)
-    parser.set_defaults(
-        gpus=num_gpus,
-        replace_sampler_ddp=False,
-        strategy=backend,
-        seed=42,
-        deterministic=True,
-        default_root_dir=default_root_dir,
-        max_epochs=50,
-    )
-
     args = parser.parse_args()
 
     # Checkpointing
-    checkpoint_dir = args.default_root_dir / "checkpoints"
+    checkpoint_dir = pathlib.Path(args.default_root_dir) / "checkpoints"
     if not checkpoint_dir.exists():
         checkpoint_dir.mkdir(parents=True)
     args.callbacks = [
         pl.callbacks.ModelCheckpoint(
-            dirpath=args.default_root_dir / "checkpoints",
+            dirpath=str(checkpoint_dir),
             save_top_k=True,
             verbose=True,
             monitor="val_loss",

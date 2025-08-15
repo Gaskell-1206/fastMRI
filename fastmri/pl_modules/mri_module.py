@@ -151,8 +151,24 @@ class MriModule(pl.LightningModule):
     def log_image(self, name, image):
         self.logger.experiment.add_image(name, image, global_step=self.global_step)
 
-    def validation_epoch_end(self, val_logs):
-        # aggregate losses
+    def on_validation_epoch_start(self):
+        self._val_logs = []
+
+    def validation_step(self, *args, **kwargs):
+        # Call the original validation_step if it exists
+        if hasattr(super(), 'validation_step'):
+            out = super().validation_step(*args, **kwargs)
+        else:
+            out = None
+        if hasattr(self, '_val_logs'):
+            self._val_logs.append(out)
+        return out
+
+    def on_validation_epoch_end(self):
+        val_logs = getattr(self, '_val_logs', [])
+        if not val_logs:
+            return
+        from collections import defaultdict
         losses = []
         mse_vals = defaultdict(dict)
         target_norms = defaultdict(dict)
@@ -161,8 +177,9 @@ class MriModule(pl.LightningModule):
 
         # use dict updates to handle duplicate slices
         for val_log in val_logs:
+            if val_log is None:
+                continue
             losses.append(val_log["val_loss"].view(-1))
-
             for k in val_log["mse_vals"].keys():
                 mse_vals[k].update(val_log["mse_vals"][k])
             for k in val_log["target_norms"].keys():
@@ -219,6 +236,8 @@ class MriModule(pl.LightningModule):
         self.log("validation_loss", val_loss / tot_slice_examples, prog_bar=True)
         for metric, value in metrics.items():
             self.log(f"val_metrics/{metric}", value / tot_examples)
+        # Clear logs after epoch
+        self._val_logs = []
 
     def test_epoch_end(self, test_logs):
         outputs = defaultdict(dict)

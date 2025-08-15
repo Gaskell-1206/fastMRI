@@ -1,4 +1,3 @@
-
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
@@ -6,6 +5,7 @@ from fastmri.data import transforms as fastmri_transforms
 from fastmri.pl_modules.mri_module import MriModule
 from fastmri.models.modl import MoDL
 from fastmri.models.varnet import SensitivityModel
+import fastmri
 
 class MoDLModule(MriModule):
     """
@@ -21,7 +21,7 @@ class MoDLModule(MriModule):
         sens_pools: int = 4,
         **kwargs
     ):
-        super().__init__(None, None, lr, weight_decay, **kwargs)
+        super().__init__(**kwargs)
         self.model = MoDL(n_layers=n_layers, k_iters=k_iters)
         self.sens_net = SensitivityModel(
             chans=sens_chans,
@@ -79,3 +79,11 @@ class MoDLModule(MriModule):
         test_loss = self.loss(output, target)
         self.log("test_loss", test_loss)
         return test_loss
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(
+            self.parameters(),
+            lr=self.lr,
+            weight_decay=self.weight_decay,
+        )
+        return optimizer
